@@ -1,0 +1,32 @@
+#!/bin/bash
+NODE_VERSION=${NODE_VERSION:-"12-alpine"}
+DEFAULT_EDITOR=${DEFAULT_EDITOR:-"micro"}
+
+execute() {
+	docker run -it --rm \
+		-e UID=$(id -u) \
+		-e GID=$(id -g) \
+		-w /workspace \
+		-v "$PWD:/workspace" \
+		"node:$NODE_VERSION" \
+		$@
+}
+
+usage() {
+	printf "\nUsage: $0 COMMAND"
+	printf "\n\nValid COMMAND values:"
+	printf "\n\tmodify\t\tOpen current script for modification in specified default editor (defined through \$DEFAULT_EDITOR variable [also located inside the script])"
+	printf "\n\tdownload\tPerform 'docker pull' to download latest version of specified image"
+	printf "\n\t*\t\tAnything that is valid for NodeJS command\n"
+}
+
+download() {
+	docker pull "node:$NODE_VERSION"
+}
+
+case "$1" in
+	help)     usage              ;;
+	download) download           ;;
+	modify)   $DEFAULT_EDITOR $0 ;;
+	*)        execute "$@"  ;;
+esac

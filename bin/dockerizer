@@ -1,0 +1,248 @@
+#!/bin/bash
+DOCKERIZER_PATH="$(cd -- $(dirname $0)/../ && pwd)"
+DOCKERIZER_EXE=$(basename "$0")
+
+# Load config
+if [ -f "$DOCKERIZER_PATH/config" ]; then
+	. "$DOCKERIZER_PATH/config"
+fi
+
+# Set default config values
+DEFAULT_EDITOR="${DEFAULT_EDITOR:-micro}"
+if [ -z "$ENABLED_APPS" ]; then
+	declare -a ENABLED_APPS=()
+fi
+
+# Use as 'confirm "Your question?" && echo $?' -> Response is stored in '$?'. 0 = true, 1 = false
+confirm() {
+	read -n 1 -r -p "$1 [y/n] " CHOICE
+	echo
+	case "$CHOICE" in
+		Y|y ) return 0 ;;
+		N|n ) ;;
+		*) echo "Invalid option, choosing 'n' as default." ;;
+	esac
+	return 1
+}
+
+#-------#
+
+# Prepare needed variables
+EXE_NAME="$DOCKERIZER_EXE"
+APP_TEMPLATE=""
+TEMPLATE_FILE_NORMAL="$DOCKERIZER_PATH/app.tpl"
+TEMPLATE_FILE_CUSTOM="$DOCKERIZER_PATH/app.custom.tpl"
+
+create() {
+	if [ -z "$1" ]; then
+		echo "What will be the name of the executable?"
+		read -e EXE_NAME
+	else
+		EXE_NAME="$1"
+	fi
+
+	if [ -f "$DOCKERIZER_PATH/bin/$EXE_NAME" ]; then
+		echo "$EXE_NAME executable already exists in '$DOCKERIZER_PATH/bin'"
+		exit 1
+	fi
+
+	confirm "Do you wish to customize it further with your own Dockerfile?"
+	BUILDABLE=$?
+
+	echo "Please specify base docker image for the app:"
+	read -e IMAGE_ORIGINAL
+
+	if [ $BUILDABLE == 0 ]; then
+		echo "Please specify custom docker image name: [dockerizer/$EXE_NAME]"
+		read -e IMAGE_CUSTOM
+		if [ -z "$IMAGE_CUSTOM" ]; then
+			IMAGE_CUSTOM="dockerizer/$EXE_NAME"
+		fi
+	
+		echo "What will be the ENTRYPOINT of app image? (Will be used as a 'command' argument provided to 'docker run' command): "
+		read -e IMAGE_ENTRYPOINT
+
+		TEMPLATE_FILE="$TEMPLATE_FILE_CUSTOM"
+	else
+		TEMPLATE_FILE="$TEMPLATE_FILE_NORMAL"
+	fi
+
+	if [ ! -f "$TEMPLATE_FILE" ]; then
+		echo "Template file not found ($TEMPLATE_FILE). Can't continue."
+		exit 2
+	fi
+
+	echo "Where do you wish to mount current PWD during command execution? [/workspace] "
+	read -e TARGET_PWD_MOUNT
+	if [ -z "$TARGET_PWD_MOUNT" ]; then
+		TARGET_PWD_MOUNT="/workspace"
+	fi
+
+	APP_TEMPLATE=$( IMAGE_ORIGINAL="$IMAGE_ORIGINAL" IMAGE_CUSTOM="$IMAGE_CUSTOM" IMAGE_ENTRYPOINT="$IMAGE_ENTRYPOINT" TARGET_PWD_MOUNT="$TARGET_PWD_MOUNT" tpl $TEMPLATE_FILE )
+	echo "$APP_TEMPLATE"
+
+	if confirm "Above is the final executable script. Is it ok?"; then
+		echo "$APP_TEMPLATE" > "$DOCKERIZER_PATH/bin/$EXE_NAME"
+		chmod +x "$DOCKERIZER_PATH/bin/$EXE_NAME"
+		echo "Saved as: $DOCKERIZER_PATH/bin/$EXE_NAME"
+	fi
+}
+
+# Edit already dockerized app (the ones within 'bin' directory)
+edit() {
+	if [ ! -z "$1" ]; then
+		EXE_NAME=$1
+	fi
+	exec $DEFAULT_EDITOR "$DOCKERIZER_PATH/bin/$EXE_NAME"
+}
+
+delete() {
+	if [ ! -z "$1" ]; then
+		if [ -f "$DOCKERIZER_PATH/bin/$1" ]; then
+			if confirm "This action is irreversible. Are you really sure you want to do this?"; then
+				rm -f "$DOCKERIZER_PATH/bin/$1"
+			fi
+		else
+			echo "$1 executable doesn't exist in '$DOCKERIZER_PATH/bin'"
+		fi
+	else
+		usage delete
+	fi
+}
+
+#-------#
+
+ensure_enabled() {
+	# Disable all
+	for APP in $DOCKERIZER_PATH/bin/*; do
+		[ -e "$APP" ] || continue
+		if [ "$APP" != "$0" ]; then
+			chmod -x "$APP"
+		fi
+	done
+
+	# Enable only specified ones
+	for APP in "${ENABLED_APPS[@]}"; do
+		chmod +x "$DOCKERIZER_PATH/bin/$APP"
+	done
+}
+
+enable() {
+	if [ ! -z "$1" ]; then
+		if [ -f "$DOCKERIZER_PATH/bin/$1" ]; then
+			ENABLED_APPS+=( "$1" )
+			ensure_enabled
+			echo "Enabled: $1"
+		else
+			echo "$1 executable doesn't exist in '$DOCKERIZER_PATH/bin'"
+		fi
+	else
+		usage enable
+	fi
+}
+
+disable() {
+	if [ ! -z "$1" ]; then
+		ENABLED_APPS=( "${ENABLED_APPS[@]/$1}" )
+		if [ -f "$DOCKERIZER_PATH/bin/$1" ]; then
+			ensure_enabled
+			echo "Disabled: $1"
+		else
+			echo "$1 executable doesn't exist in '$DOCKERIZER_PATH/bin'"
+		fi
+	else
+		usage disable
+	fi
+}
+
+list() {
+	printf "\nList of available apps:\n    [Enabled]\t[Name]\n"
+	for APP in $DOCKERIZER_PATH/bin/*; do
+		[ -e $APP ] || continue
+		[ "$APP" == "$0" ] && continue
+		APP=$(basename "$APP")
+		if [[ " ${ENABLED_APPS[@]} " =~ " $APP " ]]; then
+			printf "\t\u2713\t$APP\n"
+		else
+			printf "\t\t$APP\n"
+		fi
+	done
+}
+
+#-------#
+
+# Manage config
+config() {
+	printf "\nCurrent config:\n"
+	cat "$DOCKERIZER_PATH/config"
+}
+
+# Show help message
+usage() {
+	# TODO Help message
+	case "$1" in
+		basic)
+			printf "\nUsage:\n\t$0 COMMAND [ARGUMENTS]\n\nAvailable commands:\n\t[Name]\t[Alias]\t[Arguments]\t[Description]"
+			printf "\n\tcreate\tadd\t[NAME]\t\tCreate new startup script for 'dockerized' app based on user input. If NAME specified, use it as a filename for the startup script."
+			printf "\n\tdelete\trm\tNAME\t\tDelete NAME startup script."
+			printf "\n\tedit\tm\t[NAME]\t\tOpen NAME startup script in \$DEFAULT_EDITOR or dockerizer itself if NAME not specified."
+			printf "\n\tenable\te\tNAME\t\tMake NAME startup script executable and add to enabled list."
+			printf "\n\tdisable\td\tNAME\t\tMake NAME startup script non-executable and remove from enabled list."
+			printf "\n\tlist\tls\t\t\tList all available dockerized apps and whether they're enabled or not."
+			printf "\n\tconfig\t\t\t\tPrint current config (show contents of '$DOCKERIZER_PATH/config' file)."
+			;;
+		edit)
+			printf "\nUsage: $0 edit|m [NAME]\n\n\tOpen NAME startup script in \$DEFAULT_EDITOR or dockerizer itself if NAME not specified."; usage _list ;;
+		delete)
+			printf "\nUsage: $0 delete|rm NAME\n\n\tDelete NAME startup script."; usage _list ;;
+		enable)
+			printf "\nUsage: $0 enable|e NAME\n\n\tMake NAME startup script executable and add to enabled list."; usage _list ;;
+		disable)
+			printf "\nUsage: $0 disable|d NAME\n\n\tMake NAME startup script non-executable and remove from enabled list."; usage _list ;;
+		_list)
+			printf "\n\n\tUse: '$0 list' to see list of available apps." ;;
+		*)
+			printf "\nUnknown topic: $@" ;;
+	esac
+	echo
+}
+
+#-------#
+
+# Exec actions
+if [ $# -lt 1 ]; then
+	usage basic
+else
+	case "$1" in
+		create|edit|delete|enable|disable|list|config|usage)
+			$@ ;;
+		ls)
+			shift; list $@ ;;
+		add)
+			shift; create $@ ;;
+		rm)
+			shift; delete $@ ;;
+		m)
+			shift; edit $@ ;;
+		e)
+			shift; enable $@ ;;
+		d)
+			shift; disable $@ ;;
+		-h|help)
+			shift
+			if [ -z "$1" ]; then
+				usage basic
+			else
+				usage $@
+			fi
+			;;
+		*)
+			echo "Unknown action: $1" ;;
+	esac
+fi
+
+#-------#
+
+# Save configuration
+echo "DEFAULT_EDITOR=$DEFAULT_EDITOR" > "$DOCKERIZER_PATH/config"
+echo "ENABLED_APPS=( ${ENABLED_APPS[@]} )" >> "$DOCKERIZER_PATH/config"

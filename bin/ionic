@@ -1,0 +1,35 @@
+#!/bin/bash
+
+APP=ionic
+IMAGE_TAG=ionic:custom
+
+read -r -d '' DOCKERFILE <<EOD
+FROM node:10-alpine
+WORKDIR /app
+RUN apk update && apk upgrade && apk add git
+RUN npm i -g --unsafe-perm @ionic/cli cordova cordova-res
+EOD
+
+build() {
+	echo "$DOCKERFILE" | docker build -t $IMAGE_TAG -
+}
+
+execute() {
+	docker run -it --rm \
+		--user $(id -u):$(id -g) \
+		-v "$PWD:/app" \
+		$IMAGE_TAG \
+		$APP "$@"
+}
+
+case "$1" in
+	build) build ;;
+	cordova|node|npm)
+		APP=$1
+		shift
+		execute "$@"
+		;;
+	*)
+		execute "$@"
+		;;
+esac
