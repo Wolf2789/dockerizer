@@ -1,2 +1,2 @@
 DEFAULT_EDITOR=micro
-ENABLED_APPS=( ionic node npm pulumi )
+ENABLED_APPS=( ionic node npm pulumi dockly composer )

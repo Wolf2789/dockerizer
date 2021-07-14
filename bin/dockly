@@ -1,0 +1,9 @@
+#!/bin/bash
+
+	#-e UID=$(id -u) \
+	#-e GID=$(id -g) \
+	#-w /workspace \
+	#-v "$PWD:/workspace" \
+docker run -it --rm \
+	-v "/var/run/docker.sock:/var/run/docker.sock" \
+	lirantal/dockly
