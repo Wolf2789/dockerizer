@@ -1,4 +1,8 @@
 #!/bin/bash
+if [ -f "$DOCKERIZER_PATH/config" ]; then
+	. "$DOCKERIZER_PATH/config"
+fi
+NODE_VERSION=${NODE_VERSION:-$NODE_DEFAULT_VERSION}
 
 #RUN apk add shadow curl
 #RUN useradd -m user
@@ -6,7 +10,7 @@
 #RUN printf "#!/bin/bash\nusermod -u \\\$UID -g \\\$GID user > /dev/null 2>&1\n\\\$@" > /home/user/entrypoint && chmod +x /home/user/entrypoint
 #ENTRYPOINT [ "/home/user/entrypoint" ]
 read -r -d '' DOCKERFILE <<EOD
-FROM node:12-alpine
+FROM node:$NODE_VERSION
 RUN apk add curl
 RUN curl -fsSL https://get.pulumi.com | sh && mv /root/.pulumi /usr/local/pulumi
 ENV PATH="/usr/local/pulumi/bin:${PATH}"

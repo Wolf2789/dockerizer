@@ -2,15 +2,14 @@
 DOCKERIZER_PATH="$(cd -- $(dirname $0)/../ && pwd)"
 DOCKERIZER_EXE=$(basename "$0")
 
+# Default config
+if [ ! -f "$DOCKERIZER_PATH/config" ]; then
+	printf "DEFAULT_EDITOR=micro\nDOCKERIZER_ENABLED_APPS=()" > "$DOCKERIZER_PATH/config"
+fi
+
 # Load config
 if [ -f "$DOCKERIZER_PATH/config" ]; then
 	. "$DOCKERIZER_PATH/config"
-fi
-
-# Set default config values
-DEFAULT_EDITOR="${DEFAULT_EDITOR:-micro}"
-if [ -z "$ENABLED_APPS" ]; then
-	declare -a ENABLED_APPS=()
 fi
 
 # Use as 'confirm "Your question?" && echo $?' -> Response is stored in '$?'. 0 = true, 1 = false
@@ -122,7 +121,7 @@ ensure_enabled() {
 	done
 
 	# Enable only specified ones
-	for APP in "${ENABLED_APPS[@]}"; do
+	for APP in "${DOCKERIZER_ENABLED_APPS[@]}"; do
 		chmod +x "$DOCKERIZER_PATH/bin/$APP"
 	done
 }
@@ -130,7 +129,7 @@ ensure_enabled() {
 enable() {
 	if [ ! -z "$1" ]; then
 		if [ -f "$DOCKERIZER_PATH/bin/$1" ]; then
-			ENABLED_APPS+=( "$1" )
+			DOCKERIZER_ENABLED_APPS+=( "$1" )
 			ensure_enabled
 			echo "Enabled: $1"
 		else
@@ -143,7 +142,7 @@ enable() {
 
 disable() {
 	if [ ! -z "$1" ]; then
-		ENABLED_APPS=( "${ENABLED_APPS[@]/$1}" )
+		DOCKERIZER_ENABLED_APPS=( "${DOCKERIZER_ENABLED_APPS[@]/$1}" )
 		if [ -f "$DOCKERIZER_PATH/bin/$1" ]; then
 			ensure_enabled
 			echo "Disabled: $1"
@@ -161,7 +160,7 @@ list() {
 		[ -e $APP ] || continue
 		[ "$APP" == "$0" ] && continue
 		APP=$(basename "$APP")
-		if [[ " ${ENABLED_APPS[@]} " =~ " $APP " ]]; then
+		if [[ " ${DOCKERIZER_ENABLED_APPS[@]} " =~ " $APP " ]]; then
 			printf "\t\u2713\t$APP\n"
 		else
 			printf "\t\t$APP\n"
@@ -240,9 +239,3 @@ else
 			echo "Unknown action: $1" ;;
 	esac
 fi
-
-#-------#
-
-# Save configuration
-echo "DEFAULT_EDITOR=$DEFAULT_EDITOR" > "$DOCKERIZER_PATH/config"
-echo "ENABLED_APPS=( ${ENABLED_APPS[@]} )" >> "$DOCKERIZER_PATH/config"

@@ -1,6 +1,8 @@
 #!/bin/bash
-NODE_VERSION=${NODE_VERSION:-"12-alpine"}
-DEFAULT_EDITOR=${DEFAULT_EDITOR:-"micro"}
+if [ -f "$DOCKERIZER_PATH/config" ]; then
+	. "$DOCKERIZER_PATH/config"
+fi
+NODE_VERSION=${NODE_VERSION:-$NODE_DEFAULT_VERSION}
 
 execute() {
 	docker run -it --rm \

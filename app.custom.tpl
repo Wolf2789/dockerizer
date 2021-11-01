@@ -1,4 +1,7 @@
 #!/bin/bash
+if [ -f "$DOCKERIZER_PATH/config" ]; then
+	. "$DOCKERIZER_PATH/config"
+fi
 
 read -r -d '' DOCKERFILE <<EOD
 FROM {{printf $IMAGE_ORIGINAL}}
