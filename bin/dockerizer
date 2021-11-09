@@ -30,10 +30,10 @@ confirm() {
 # Prepare needed variables
 EXE_NAME="$DOCKERIZER_EXE"
 APP_TEMPLATE=""
-TEMPLATE_FILE_NORMAL="$DOCKERIZER_PATH/app.tpl"
-TEMPLATE_FILE_CUSTOM="$DOCKERIZER_PATH/app.custom.tpl"
+TEMPLATE_FILE_NORMAL="$DOCKERIZER_PATH/template/app.tpl"
+TEMPLATE_FILE_CUSTOM="$DOCKERIZER_PATH/template/app.custom.tpl"
 
-create() {
+create () {
 	if [ -z "$1" ]; then
 		echo "What will be the name of the executable?"
 		read -e EXE_NAME
@@ -89,14 +89,14 @@ create() {
 }
 
 # Edit already dockerized app (the ones within 'bin' directory)
-edit() {
+edit () {
 	if [ ! -z "$1" ]; then
 		EXE_NAME=$1
 	fi
 	exec $DEFAULT_EDITOR "$DOCKERIZER_PATH/bin/$EXE_NAME"
 }
 
-delete() {
+delete () {
 	if [ ! -z "$1" ]; then
 		if [ -f "$DOCKERIZER_PATH/bin/$1" ]; then
 			if confirm "This action is irreversible. Are you really sure you want to do this?"; then
@@ -112,7 +112,7 @@ delete() {
 
 #-------#
 
-ensure_enabled() {
+ensure_enabled () {
 	# Disable all
 	for APP in $DOCKERIZER_PATH/bin/*; do
 		[ -e "$APP" ] || continue
@@ -127,7 +127,7 @@ ensure_enabled() {
 	done
 }
 
-enable() {
+enable () {
 	if [ ! -z "$1" ]; then
 		if [ -f "$DOCKERIZER_PATH/bin/$1" ]; then
 			ENABLED_APPS+=( "$1" )
@@ -141,7 +141,7 @@ enable() {
 	fi
 }
 
-disable() {
+disable () {
 	if [ ! -z "$1" ]; then
 		ENABLED_APPS=( "${ENABLED_APPS[@]/$1}" )
 		if [ -f "$DOCKERIZER_PATH/bin/$1" ]; then
@@ -155,7 +155,7 @@ disable() {
 	fi
 }
 
-list() {
+list () {
 	printf "\nList of available apps:\n    [Enabled]\t[Name]\n"
 	for APP in $DOCKERIZER_PATH/bin/*; do
 		[ -e $APP ] || continue
@@ -183,6 +183,7 @@ usage() {
 	case "$1" in
 		basic)
 			printf "\nUsage:\n\t$0 COMMAND [ARGUMENTS]\n\nAvailable commands:\n\t[Name]\t[Alias]\t[Arguments]\t[Description]"
+			printf "\n\tservice\t\t\tExecute dockerizer_service binary."
 			printf "\n\tcreate\tadd\t[NAME]\t\tCreate new startup script for 'dockerized' app based on user input. If NAME specified, use it as a filename for the startup script."
 			printf "\n\tdelete\trm\tNAME\t\tDelete NAME startup script."
 			printf "\n\tedit\tm\t[NAME]\t\tOpen NAME startup script in \$DEFAULT_EDITOR or dockerizer itself if NAME not specified."
@@ -214,6 +215,11 @@ if [ $# -lt 1 ]; then
 	usage basic
 else
 	case "$1" in
+		service)
+			shift
+			ARGS=( $@ )
+			ARGS=( "${ARGS[@]/#/_}" )
+			echo ${0}_service "${ARGS[@]}" ;;
 		create|edit|delete|enable|disable|list|config|usage)
 			$@ ;;
 		ls)

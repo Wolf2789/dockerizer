@@ -1,0 +1,176 @@
+#!/bin/bash
+DOCKERIZER_PATH="$(cd -- $(dirname $0)/../ && pwd)"
+DOCKERIZER_EXE=$(basename "$0")
+
+# Load config
+if [ -f "$DOCKERIZER_PATH/config" ]; then
+	. "$DOCKERIZER_PATH/config"
+fi
+
+# Set default config values
+DEFAULT_EDITOR="${DEFAULT_EDITOR:-micro}"
+if [ -z "$ENABLED_APPS" ]; then
+	declare -a ENABLED_APPS=()
+fi
+
+# Use as 'confirm "Your question?" && echo $?' -> Response is stored in '$?'. 0 = true, 1 = false
+confirm() {
+	read -n 1 -r -p "$1 [y/n] " CHOICE
+	echo
+	case "$CHOICE" in
+		Y|y ) return 0 ;;
+		N|n ) ;;
+		*) echo "Invalid option, choosing 'n' as default." ;;
+	esac
+	return 1
+}
+
+#-------#
+
+# Prepare needed variables
+SERVICE_NAME=""
+ENV_TEMPLATE=""
+COMPOSE_TEMPLATE=""
+TEMPLATE_FILES_PATH="$DOCKERIZER_PATH/template/service"
+TEMPLATE_COMPOSE_FILE="$TEMPLATE_FILES_PATH/docker-compose.yml.tpl"
+TEMPLATE_ENV_FILE="$TEMPLATE_FILES_PATH/.env.tpl"
+
+create () {
+	if [ -z "$1" ]; then
+		echo "What will be the name of the service?"
+		read -e SERVICE_NAME
+	else
+		SERVICE_NAME="$1"
+	fi
+
+	if [ -d "$DOCKERIZER_PATH/service/$SERVICE_NAME" ]; then
+		echo "$SERVICE_NAME service already exists in '$DOCKERIZER_PATH/service'"
+		exit 1
+	fi
+
+	echo "Please specify base docker image for the service:"
+	read -e IMAGE_ORIGINAL
+
+	if [ ! -d "$TEMPLATE_FILES_PATH" ]; then
+		echo "Template files directory not found ($TEMPLATE_FILES_PATH). Can't continue."
+		exit 2
+	else
+		if [ ! -f "$TEMPLATE_COMPOSE_FILE" ]; then
+			echo "Template compose file not found ($TEMPLATE_COMPOSE_FILE). Can't continue."
+			exit 2
+		fi
+		if [ ! -f "$TEMPLATE_ENV_FILE" ]; then
+			echo "Template environment file not found ($TEMPLATE_ENV_FILE). Can't continue."
+			exit 2
+		fi
+	fi
+
+	ENV_TEMPLATE=$( SERVICE_NAME="$SERVICE_NAME" tpl $TEMPLATE_ENV_FILE )
+	COMPOSE_TEMPLATE=$( SERVICE_NAME="$SERVICE_NAME" IMAGE_ORIGINAL="$IMAGE_ORIGINAL" tpl $TEMPLATE_COMPOSE_FILE )
+	echo "## Environment file:"
+	echo "$COMPOSE_TEMPLATE"
+	echo "## Compose file:"
+	echo "$COMPOSE_TEMPLATE"
+
+	if confirm "Above is the final files. Are they ok?"; then
+		mkdir "$DOCKERIZER_PATH/service/$SERVICE_NAME"
+		echo "$ENV_TEMPLATE" > "$DOCKERIZER_PATH/service/$SERVICE_NAME/.env"
+		echo "$COMPOSE_TEMPLATE" > "$DOCKERIZER_PATH/service/$SERVICE_NAME/docker-compose.yml"
+		echo "Saved as: $DOCKERIZER_PATH/service/$SERVICE_NAME"
+	fi
+}
+
+# Edit already dockerized app (the ones within 'bin' directory)
+env () {
+	if [ ! -z "$1" ]; then
+		SERVICE_NAME=$1
+	fi
+	exec $DEFAULT_EDITOR "$DOCKERIZER_PATH/service/$SERVICE_NAME/.env"
+}
+
+edit () {
+	if [ ! -z "$1" ]; then
+		SERVICE_NAME=$1
+	fi
+	exec $DEFAULT_EDITOR "$DOCKERIZER_PATH/service/$SERVICE_NAME/docker-compose.yml"
+}
+
+delete () {
+	if [ ! -z "$1" ]; then
+		if [ -d "$DOCKERIZER_PATH/service/$1" ]; then
+			cd "$DOCKERIZER_PATH/service/$1" && docker-compose down
+			if confirm "This action is irreversible. Are you really sure you want to do this?"; then
+				rm -rf "$DOCKERIZER_PATH/service/$1"
+			fi
+		else
+			echo "$1 service doesn't exist in '$DOCKERIZER_PATH/service'"
+		fi
+	else
+		usage delete
+	fi
+}
+
+#-------#
+
+list () {
+	printf "\nList of available apps:\n"
+	for APP in $DOCKERIZER_PATH/service/*; do
+		[ -e $APP ] || continue
+		[ "$APP" == "$0" ] && continue
+		APP=$(basename "$APP")
+		printf "\t$APP\n"
+	done
+}
+
+#-------#
+
+# Show help message
+usage() {
+	# TODO Help message
+	case "$1" in
+		basic)
+			printf "\nUsage:\n\t$0 COMMAND [ARGUMENTS]\n\nAvailable commands:\n\t[Name]\t[Alias]\t[Arguments]\t[Description]"
+			printf "\n\tcreate\tadd\t[NAME]\t\tCreate new compose and environment files for 'dockerized' service app based on user input. If NAME specified, use it as a filename for the startup script."
+			printf "\n\tdelete\trm\tNAME\t\tDelete NAME startup script."
+			printf "\n\tedit\tm\t[NAME]\t\tOpen NAME startup script in \$DEFAULT_EDITOR or dockerizer itself if NAME not specified."
+			printf "\n\tlist\tls\t\t\tList all available dockerized apps and whether they're enabled or not."
+			;;
+		edit)
+			printf "\nUsage: $0 edit|m [NAME]\n\n\tOpen NAME compose file in \$DEFAULT_EDITOR or dockerizer itself if NAME not specified."; usage _list ;;
+		delete)
+			printf "\nUsage: $0 delete|rm NAME\n\n\tDelete NAME service files."; usage _list ;;
+		list)
+			printf "\n\n\tUse: '$0 list' to see list of available services." ;;
+		*)
+			printf "\nUnknown topic: $@" ;;
+	esac
+	echo
+}
+
+#-------#
+
+# Exec actions
+if [ $# -lt 1 ]; then
+	usage basic
+elif [[ $1 == _* ]]; then
+	COMMAND="${1#_}"
+	shift
+	echo $COMMAND
+	case "$COMMAND" in
+		help)
+			shift
+			if [ -z "$1" ]; then
+				usage basic
+			else
+				usage $@
+			fi
+			;;
+		create|edit|delete)
+			$@ ;;
+		*)
+			echo "Unknown action: $1" ;;
+	esac
+else
+	# cd service path
+	echo docker-compose $@
+fi

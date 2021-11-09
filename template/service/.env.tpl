@@ -1,0 +1,1 @@
+COMPOSE_PROJECT_NAME=dockerizer_autok3s

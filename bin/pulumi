@@ -7,7 +7,7 @@
 #ENTRYPOINT [ "/home/user/entrypoint" ]
 read -r -d '' DOCKERFILE <<EOD
 FROM node:12-alpine
-RUN apk add curl
+RUN apk add curl docker openrc
 RUN curl -fsSL https://get.pulumi.com | sh && mv /root/.pulumi /usr/local/pulumi
 ENV PATH="/usr/local/pulumi/bin:${PATH}"
 EOD
@@ -15,7 +15,7 @@ EOD
 IMAGE_TAG=pulumi:node
 
 build() {
-	echo "$DOCKERFILE" | docker build -t $IMAGE_TAG -
+	echo "$DOCKERFILE" | docker build --no-cache -t $IMAGE_TAG -
 }
 
 execute() {
@@ -27,11 +27,13 @@ execute() {
 		-e UID=$(id -u) \
 		-e GID=$(id -g) \
 		-e PULUMI_CONFIG_PASSPHRASE="" \
+		-e KUBECONFIG="/.kube/config" \
 		-w /workspace \
+		--network=host \
 		-v "$PWD:/workspace" \
 		-v "$HOME:/root" \
-		-v "/var/run/docker.sock:/var/run/docker.sock:ro" \
-		-v "/var/lib/docker:/var/lib/docker:ro" \
+		-v "$KUBECONFIG:/.kube/config:ro" \
+		-v "/var/run/docker.sock:/var/run/docker.sock" \
 		--entrypoint="$APP" \
 		$IMAGE_TAG \
 		"$@"

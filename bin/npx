@@ -1,4 +1,4 @@
 #!/bin/bash
 BASEDIR=$(dirname $0)
 NODE_EXE="$BASEDIR/node"
-bash $NODE_EXE npm $@
+bash $NODE_EXE npx $@
