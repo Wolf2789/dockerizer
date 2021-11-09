@@ -1,4 +1,8 @@
 #!/bin/bash
+DOCKERIZER_PATH="$(cd -- $(dirname $0)/../ && pwd)"
+if [ -f "$DOCKERIZER_PATH/config" ]; then
+	. "$DOCKERIZER_PATH/config"
+fi
 
 docker run -it --rm \
 	-e UID=$(id -u) \
